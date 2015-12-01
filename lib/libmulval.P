@@ -1,0 +1,336 @@
+% MulVAL Prolog libraries
+% Author : Xinming Ou
+% Copyright (C) 2011, Argus Cybersecurity Lab, Kansas State University
+
+% This program is free software: you can redistribute it and/or modify
+% it under the terms of the GNU General Public License as published by
+% the Free Software Foundation, either version 3 of the License, or
+% (at your option) any later version.
+% 
+% This program is distributed in the hope that it will be useful,
+% but WITHOUT ANY WARRANTY; without even the implied warranty of
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+% GNU General Public License for more details.
+% 
+% You should have received a copy of the GNU General Public License
+% along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+:- import append/3 from lists.
+:- dynamic metric/2.
+
+
+/* Meta logical functions */
+number_atom(N, A) :-
+	number_chars(N, L),
+	atom_chars(A, L).
+
+atoms_concat([A|As], Result) :-
+	!,
+	atoms_concat(As, ResultAs),
+	atom_concat(A, ResultAs, Result).
+
+atoms_concat(A, A).
+
+addArgumentBeginning(Lit, Arg, NewLit) :-
+	Lit =.. [Pred|Args],
+	NewLit =.. [Pred|[Arg|Args]].
+
+addArgumentEnd(Lit, Arg, NewLit) :-
+	Lit =.. [Pred|Args],
+	append(Args, [Arg], NewArgs),
+	NewLit =.. [Pred|NewArgs].
+
+
+
+/* Common functions for lists */
+
+is_empty([]).
+is_not_empty([_|_]).
+
+nth(N, L, X) :-
+	integer(N), !,
+	N >= 1,
+	'$nth1'(N, L, X).
+
+nth(N, L, X) :-
+	var(N),
+	'$nth2'(L, X, 1, N).
+
+
+'$nth1'(1, [X|_], X) :-
+	!.
+
+'$nth1'(N, [_|T], X) :-
+	N1 is N - 1,
+	'$nth1'(N1, T, X).
+
+
+'$nth2'([X|_], X, N, N).
+
+'$nth2'([_|T], X, I, N) :-
+	I1 is I + 1,
+	'$nth2'(T, X, I1, N).
+
+
+list_apply([], _Function).
+
+/* Consider change =.. to hilog_functor for efficiency */
+
+list_apply([A|As], Function) :-
+	Call ^=.. [Function, A],
+	Call,
+	list_apply(As, Function).
+
+list_apply([], _A, _Function).
+
+list_apply([A|_], A, Function) :-
+	Function,
+	fail.
+
+list_apply([_|As], A, Function) :-
+	list_apply(As, A, Function).
+
+
+
+list_map([], _Function, []).
+
+list_map([A|As], Function, [ResultA|ResultAs]) :-
+	Call ^=.. [Function, A, ResultA],
+	Call,
+	list_map(As, Function, ResultAs).
+
+list_fold_l([], _Function, V, V).
+
+
+list_fold_l([A|As], Function, V0, V) :-
+	Call ^=.. [Function, V0, A, FV0],
+	Call,
+	list_fold_l(As, Function, FV0, V).
+
+list_fold_r([], _Function, V, V).
+
+list_fold_r([A|As], Function, V0, V) :-
+	list_fold_r(As, Function, V0, FV0),
+	Call ^=.. [Function, FV0, A, V],
+	Call.
+
+plus(N, M, NplusM) :-
+	NplusM is N+M.
+
+list_sum(L, Sum) :-
+	list_fold_l(L, plus, 0, Sum).
+
+debug(Command, Guard) :-
+	Guard,
+	!,
+	Command.
+
+
+
+/* Functions for debugging programs */
+
+debug(_Command, _Guard).
+
+level(N) :-
+	debug_level(M),
+	N @< M.
+
+decrease_debug_iter_counter :-
+	debug_iter_counter(N),
+	0 @< N,
+	M is N-1,
+	retract(debug_iter_counter(N)),
+	assert(debug_iter_counter(M)).
+
+debug_level(1).
+
+% :- assert(debug_iter_counter(50)).
+
+
+
+
+
+/* Iterate Command for each Predicate in the XSB database */
+iterate(Predicate, Command) :-
+	Predicate,
+	Command,
+	fail.
+
+iterate(_, _).
+
+
+/*   Counter operations */
+
+counter_init(Counter) :-
+	CounterLiteral =.. [Counter, _],
+	retractall(CounterLiteral),
+	CounterInitLiteral =.. [Counter, 0],
+	assert(CounterInitLiteral).
+	
+counter_next(Counter, N) :-
+	CounterLiteral =.. [Counter, N],
+	CounterLiteral,
+	retract(CounterLiteral),
+	NNext is N + 1,
+	NextCounterLiteral =.. [Counter, NNext],
+	assert(NextCounterLiteral).
+
+/********************************************************/
+/*   Program to output standard output to a file.       */
+/********************************************************/
+
+file_truncate(Filenm) :-
+	open(Filenm, write, Stream),
+	close(Stream).
+
+stdout2file_init(Filenm) :-
+	file_truncate(Filenm),
+	tell(Filenm).
+
+stdout2file_end :-
+	told.
+
+stdout2file(Program, Filenm) :-
+	stdout2file_init(Filenm),
+	Program,
+	!,   % Program is supposed to be deterministic
+	stdout2file_end.
+
+% If the above call to Program fails
+stdout2file(_Program, _Filenm) :-
+	stdout2file_end.
+
+
+/*************************************************************************************/
+/******                     I/O predicates                                     *******/
+/*************************************************************************************/
+
+/* Generic function for retrieving an arbitrary Datalog clause from the XSB database */
+read_clause_from_database(Clause)(Clause) :-
+	Clause.
+
+
+read_clause_from_stream(Clause) :-
+	repeat,
+	read(ReadClause),
+	(ReadClause = end_of_file 
+              ->
+	      !,
+              fail;
+	  Clause = ReadClause).
+
+write_clause_to_stdout(C) :-
+	       write_canonical(C), writeln('.'), nl.
+
+
+
+/************************************************************************************/
+/*                  The magic predicate                                             */
+/************************************************************************************/
+
+/*
+magic(Y, X1, X2) :-
+	Y is X1+X2.
+
+magic(Y, X1, X2, X3) :-
+	Y is X1+X2+X3.
+
+magic(Y, X1, X2, X3, X4) :-
+	Y is X1+X2+X3+X4.
+
+magic(Y, X1, X2, X3, X4, X5) :-
+	Y is X1+X2+X3+X4+X5.
+
+magic(Y, X1, X2, X3, X4, X5, X6) :-
+	Y is X1+X2+X3+X4+X5+X6.
+
+magic(Y, X1, X2, X3, X4, X5, X6, X7) :-
+	Y is X1+X2+X3+X4+X5+X6+X7.
+*/
+
+magic(Y, X1, _X2) :-
+	Y is X1.
+
+magic(Y, X1, _X2, _X3) :-
+	Y is X1.
+
+magic(Y, X1, _X2, _X3, _X4) :-
+	Y is X1.
+
+magic(Y, X1, _X2, _X3, _X4, _X5) :-
+	Y is X1.
+
+magic(Y, X1, _X2, _X3, _X4, _X5, _X6) :-
+	Y is X1.
+
+magic(Y, X1, _X2, _X3, _X4, _X5, _X6, _X7) :-
+	Y is X1.
+
+
+
+
+/************************************************************************************/
+/*           Interface functions for running MulVAL attack simulation               */
+/************************************************************************************/
+
+mulval_run :-
+	mulval_preprocess,
+	writeln('Running attack simulation...'),
+	attack_simulation_trace('trace_output.P'),
+	mulval_postprocess.
+
+mulval_preprocess :-
+	supportedTraceMode(Mode),
+	!,
+	generate_dynamic_decl('dynamic_decl.gen'),
+	load_dyn('dynamic_decl.gen'),
+	translate_interaction_rules(Mode),
+	translate_interaction_rules(Mode, 'translated_rules.P'),
+	translate_interaction_rules(stripExplanation).
+
+
+mulval_preprocess :-
+	!,
+	writeln('######################Error: Undefined or unsupported trace mode.'),
+	fail.
+
+mulval_postprocess :-
+	findall(P, metric(P,_), L),
+	!,
+	tell('metric.P'),
+        list_apply(L, output_metric),
+%	iterate(vulExists(H, VulID, Program, Range, LossType), output_metric(vulExists(H, VulID, Program, Range, LossType))),
+	told.
+
+mulval_postprocess :-
+	!.
+
+output_metric(Fact) :-
+	findall(Fact, Fact, L),
+	!,
+	list_apply(L, output_single_metric).
+
+output_metric(Fact) :-
+	!.
+
+output_single_metric(Fact) :-
+	metric(Fact, Metric),
+	write_canonical(metric(Fact, Metric)),
+	writeln('.').
+
+supportedTraceMode(trace) :-
+	traceMode(trace).
+
+supportedTraceMode(completeTrace) :-
+	traceMode(completeTrace).
+
+supportedTraceMode(completeTrace2) :-
+	traceMode(completeTrace2).
+
+supportedTraceMode(Mode) :-
+	traceMode(Mode),
+	!,
+	write('######################Error: trace mode '), write(Mode), writeln(' is not supported.'),
+	fail.
+
+

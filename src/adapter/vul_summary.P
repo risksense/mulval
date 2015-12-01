@@ -1,0 +1,47 @@
+summarize_vuln(VulGrpFile) :-
+	file_truncate(VulGrpFile),
+	open(VulGrpFile, append, GroupsHandle),
+	findall(vuln_group(H, GrpID, Software, Pre, Post, CapLevelRequired, LVulns), 
+	        summarize_vuln(H, GrpID, Software, Pre, Post, CapLevelRequired, LVulns),
+		GrpList),
+	list_apply(GrpList, output_summary(GroupsHandle)),
+	close(GroupsHandle).
+
+
+summarize_vuln(H, GrpID, Software, Pre, Post, CapLevelRequired, LVulID) :-
+	counter_init(vulGrp),
+	setof(VulID, (vulExists(H, VulID, Software), vulProperty(VulID, Pre, Post)), LVulID),
+	counter_next(vulGrp, MiddleID),
+	number_atom(MiddleID, MiddleID1),
+	atom_concat(H, MiddleID1, GrpID),
+%	atom_concat(H, H, GrpID),
+	list_map(LVulID, vulID_to_cvss_ac, LCVSS_AC),
+	list_fold_l(LCVSS_AC, aggregate_cap_level, h, CapLevelRequired).
+
+vulID_to_cvss_ac(VulID, CVSS_AC) :-
+	cvss(VulID, CVSS_AC),
+	!.
+
+% If a vulnerability does not have CVSS AC metrics in NVD, we assume its metric is l
+vulID_to_cvss_ac(_VulID, l).
+
+aggregate_cap_level(Cap, Cap, Cap).
+
+aggregate_cap_level(CapInitial, CapThis, CapInitial) :-
+	capability_level_subsumes(CapThis, CapInitial).
+
+aggregate_cap_level(CapInitial, CapThis, CapThis) :-
+	capability_level_subsumes(CapInitial, CapThis).
+
+output_summary(GroupsHandle)(vuln_group(H, GrpID, Software, Pre, Post, CapLevelRequired, LVulns)) :-
+	writeq(vulExists(H, GrpID, Software)),
+	write('.\n'),
+	writeq(vulProperty(GrpID, Pre, Post)),
+	write('.\n'),
+	writeq(capability_required(GrpID, CapLevelRequired)),
+	write('.\n\n'),
+	list_apply(LVulns, write_grp_mapping(GrpID, GroupsHandle)).
+
+write_grp_mapping(GrpID, GroupsHandle)(VulID) :-
+	writeq(GroupsHandle, group(GrpID, VulID)),
+	write(GroupsHandle, '.\n').

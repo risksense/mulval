@@ -1,0 +1,366 @@
+% MulVAL interaction rules
+% Author : Xinming Ou, Su Zhang
+% Copyright (C) 2011, Argus Cybersecurity Lab, Kansas State University
+
+% This program is free software: you can redistribute it and/or modify
+% it under the terms of the GNU General Public License as published by
+% the Free Software Foundation, either version 3 of the License, or
+% (at your option) any later version.
+% 
+% This program is distributed in the hope that it will be useful,
+% but WITHOUT ANY WARRANTY; without even the implied warranty of
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+% GNU General Public License for more details.
+% 
+% You should have received a copy of the GNU General Public License
+% along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+/******************************************************/
+/****         Predicates Declaration              *****/
+/******************************************************/
+
+primitive(inCompetent(_principal)).
+primitive(competent(_principal)).
+primitive(clientProgram(_host, _programname)).
+primitive(vulExists(_host, _vulID, _program)).
+primitive(vulProperty(_vulID, _range, _consequence)).
+primitive(hacl(_src, _dst, _prot, _port)).
+primitive(attackerLocated(_host)).
+primitive(hasAccount(_principal, _host, _account)).
+primitive(networkServiceInfo(_host, _program, _protocol, _port, _user)).
+primitive(setuidProgramInfo(_host, _program, _owner)).
+primitive(nfsExportInfo(_server, _path, _access, _client)).
+primitive(nfsMounted(_client, _clientpath, _server, _serverpath, _access)).
+primitive(localFileProtection(_host, _user, _access, _path)).
+primitive(dependsOn(_h, _program, _library)).
+primitive(installed(_h, _program)).
+primitive(bugHyp(_,_,_,_)).
+primitive(vulExists(_machine,_vulID,_program,_range,_consequence)).
+primitive(canAccessFile(_host, _user, _access, _path)).
+primitive(isWebServer(_host)).
+meta(cvss(_vulID, _ac)).
+
+
+derived(execCode(_host, _user)).
+derived(netAccess(_machine,_protocol,_port)).
+derived(canAccessHost(_host)).
+derived(accessFile(_machine,_access,_filepath)).
+derived(accessMaliciousInput(_host, _principal, _program)).
+derived(principalCompromised(_victim)).
+derived(dos(_host)).
+derived(logInService(_host, _protocol, _port)).
+
+meta(attackGoal(_)).
+meta(advances(_, _)).
+
+/******************************************************/
+/****         Tabling Predicates                  *****/
+/*   All derived predicates should be tabled          */
+/******************************************************/
+
+:- table execCode/2.
+:- table netAccess/3.
+:- table canAccessHost/1.
+:- table canAccessFile/4.
+:- table accessFile/3.
+:- table principalCompromised/1.
+:- table vulExists/5.
+:- table logInService/3.
+
+
+
+/******************************************************/
+/****         Interaction Rules                   *****/
+/******************************************************/
+
+/****** Section execCode ******
+interaction_rule(
+   (execCode(H, Perm) :-
+	hasAccount(P, H, Perm)),
+   rule_desc('Insider threat', 1)).
+*/
+
+interaction_rule(
+   (execCode(Host, Perm) :-
+	principalCompromised(Victim),
+	hasAccount(Victim, Host, Perm),
+	canAccessHost(Host)),
+   rule_desc('When a principal is compromised any machine he has an account on will also be compromised',
+   0.5)).
+
+interaction_rule(
+  (execCode(Host, root) :-
+	execCode(Host, _Perm2),
+	vulExists(Host, _, Software, localExploit, privEscalation)),
+  rule_desc('local exploit',
+  1.0)).
+
+interaction_rule(
+  (execCode(H, Perm) :-
+	vulExists(H, _, Software, remoteExploit, privEscalation),
+	networkServiceInfo(H, Software, Protocol, Port, Perm),
+	netAccess(H, Protocol, Port)),
+  rule_desc('remote exploit of a server program',
+  1.0)).
+
+interaction_rule(
+  (execCode(H, Perm) :-
+        vulExists(H, _, Software, remoteClient, privEscalation),
+	hasAccount(Victim, H, Perm),
+        accessMaliciousInput(H, Victim, Software)),
+  rule_desc('remote exploit for a client program',
+  0.5)).
+
+interaction_rule(
+  (execCode(H, root) :-
+	accessFile(H, write, _Path)),
+  rule_desc('Trojan horse installation',
+  0.8)).
+
+/* Singleton variable at head
+interaction_rule(
+ (execCode( Attacker, Host, _) :-
+   execCode(Attacker, Host, root)),
+  'execution at any level if root execution').
+*/
+
+
+
+/******** Section netAccess ********/
+/* accessing a host through network according to a hacl policy.
+   For now we assume that every user on a local
+   machine has access to network. this may change
+   later. */
+interaction_rule(
+  (netAccess(H2, Protocol, Port) :-
+	execCode(H1, _Perm),  /* Any permission level */
+	advances(H1, H2),
+    hacl(H1, H2, Protocol, Port)),
+  rule_desc('multi-hop access',
+  0.5)).
+
+interaction_rule(
+  (netAccess(H, Protocol, Port) :-
+	attackerLocated(Zone),
+	hacl(Zone, H, Protocol, Port)),
+  rule_desc('direct network access',
+  1.0)).
+
+interaction_rule(
+  (netAccess(H, Protocol, Port) :-
+	attackerLocated(H)),
+  rule_desc('direct on-host access',
+  1.0)).
+
+
+/****** Section canAccessHost ******/
+interaction_rule(
+  (canAccessHost(H) :-
+	execCode(H, _Perm)),
+  rule_desc('Access a host through executing code on the machine',
+  1.0)).
+
+interaction_rule(
+  (canAccessHost(H) :-
+	logInService(H, Protocol, Port),
+	netAccess(H, Protocol, Port)),
+  rule_desc('Access a host through a log-in service',
+  1.0)).
+
+
+/******** Section accessFile ********/
+interaction_rule(
+  (accessFile(H, Access, Path) :-
+	execCode(H, Usr),
+	canAccessFile(H, Usr, Access, Path)),
+  rule_desc('execCode implies file access',
+  1.0)).
+
+
+/****** Section principalCompromised ******/
+interaction_rule(
+  (principalCompromised(Victim) :-
+	hasAccount(Victim, H, _Perm),
+	execCode(H, root)),
+  rule_desc('password sniffing',
+  0.8)).
+
+interaction_rule(
+  (principalCompromised(Victim) :-
+	hasAccount(Victim, H, User),
+	execCode(H, User)),
+  rule_desc('password sniffing',
+  0.8)).
+
+/*
+interaction_rule(
+  (principalCompromised(Victim) :-
+	inCompetent(Victim)),
+  rule_desc('incompetent user',
+  0.2)).
+*/
+
+
+
+/********************************************************/
+/*      Software specific knowledge                     */
+/********************************************************/
+
+/*
+explain(logInService(H, Protocol, Port), Text) :-
+	fmt_write_string(Text,
+  "There is a login service running under protocol %S and port %S on host %S.", args(Protocol, Port, H)).
+*/
+
+
+
+/***************** Section ssh **********************/
+interaction_rule(
+  (logInService(H, Protocol, Port) :-
+	networkServiceInfo(H, sshd, Protocol, Port, _)),
+  rule_desc('',
+  1)).
+
+interaction_rule(
+  (logInService(H, Protocol, Port) :-
+	networkServiceInfo(H, vpnService, Protocol, Port, _)),
+  rule_desc('',
+  1)).
+
+
+/**************** Section  nfs *****************/
+/* Principal P can access files on a NFS server if the files
+   on the server are mounted at a client and he can access the
+   files on the client side */
+interaction_rule(
+  (accessFile(Server, Access, ServerPath) :-
+	nfsMounted(Client, ClientPath, Server, ServerPath, Access),
+	accessFile(Client, Access, ClientPath)),
+  rule_desc('NFS semantics',
+  1)).
+
+
+/* Principal P can access files on a NFS client if the files
+   on the server are mounted at the client and he can access the
+   files on the server side */
+interaction_rule(
+  (accessFile(Client, Access, ClientPath) :-
+	nfsMounted(Client, ClientPath, Server, ServerPath, read),
+	accessFile(Server, Access, ServerPath)),
+  rule_desc('NFS semantics',
+  1)).
+
+
+interaction_rule(
+  (accessFile(Server, Access, Path) :-
+	execCode(Client, _User),
+    nfsExportInfo(Server, Path, Access, Client),
+    hacl(Client, Server, nfsProtocol, nfsPort)),
+  rule_desc('NFS shell',
+  0.8)).
+
+
+interaction_rule(
+  (canAccessFile(H, Usr, Acc, Path) :-
+	localFileProtection(H, Usr, Acc, Path)),
+  rule_desc('',
+  1)).
+
+
+/* Singleton variable in head
+interaction_rule(
+  (canAccessFile(_H, root, _Access, _Path)),
+  'root has arbitrary access').
+*/
+
+
+interaction_rule((vulExists(H, ID, Sw, Range, Consequence):-
+	        vulExists(H, ID, Sw),
+		vulProperty(ID, Range, Consequence)),
+             rule_desc('',
+             1)).
+
+interaction_rule((vulExists(H, _ID, Sw, Range, Consequence):-
+	        bugHyp(H, Sw, Range, Consequence)),
+             rule_desc('Introducing hypothetical bug',
+             1)).
+
+
+interaction_rule((vulExists(H, ID, Sw, Range, Consequence):-
+	        vulExists(H, ID, Library, Range, Consequence),
+		dependsOn(H, Sw, Library)),
+             rule_desc('Library bug',
+             1)).
+
+
+interaction_rule(
+   (accessMaliciousInput(H, Victim, Software) :-
+     inCompetent(Victim),
+     hacl(H, MaliciousMachine, httpProtocol, httpPort),
+     attackerLocated(MaliciousMachine)),
+  rule_desc('Browsing a malicious website', 0.8)).
+
+interaction_rule(
+   (accessMaliciousInput(H, Victim, Software) :-
+     competent(Victim),
+     hacl(H, MaliciousMachine, httpProtocol, httpPort),
+     attackerLocated(MaliciousMachine)),
+  rule_desc('Browsing a malicious website', 0.1)).
+
+interaction_rule(
+   (accessMaliciousInput(H, Victim, Software) :-
+     inCompetent(Victim),
+     isWebServer(CompromisedMachine),
+     hacl(H, CompromisedMachine, httpProtocol, httpPort),
+     execCode(CompromisedMachine, _)),
+  rule_desc('Browsing a compromised website', 0.4)).
+
+
+/*
+interaction_rule(
+   (canAccessMaliciousInput(H, Browser) :-
+     installed(H, Browser),
+     isWebBrowser(Browser)),
+  rule_desc('A browser can potentially access malicious input',
+  1)).
+
+
+interaction_rule(
+   (canAccessMaliciousInput(H, Software) :-
+	vulExists(H, _, Software, remoteClient, privEscalation),
+	inCompetent(Victim),
+	hasAccount(Victim, H, _Perm)),
+  rule_desc('A remote client vulnerability can potentially access malicious input from a host used by careless user',
+  1)).
+
+
+interaction_rule(
+   (canAccessMaliciousInput(H, Browser) :-
+     installed(H, Browser),
+     isWebBrowser(Browser),
+     hacl(H, MaliciousMachine, httpProtocol, httpPort),
+     attackerLocated(MaliciousMachine)),
+  rule_desc('Browsing a malicious website',
+  1)).
+
+interaction_rule(
+   (canAccessMaliciousInput(H, Browser) :-
+     installed(H, Browser),
+     isWebBrowser(Browser),
+     hacl(H, CompromisedMachine, httpProtocol, httpPort),
+     execCode(CompromisedMachine, _)),
+  rule_desc('Browsing a compromised website',
+  0.4)).
+
+interaction_rule(
+   (canAccessMaliciousInput(H, EmailClientSoftware) :-
+     installed(H, EmailClientSoftware),
+     isEmailClient(EmailClientSoftware),
+     isEmailServer(EmailServerSoftware),
+     hacl(H, EmailServer, EmailProtocol, EmailPort),
+     networkServiceInfo(EmailServer, EmailServerSoftware,
+                                EmailProtocol, EmailPort, _Perm)),
+   rule_desc('receive an email message',
+   0.4)).
+
+*/

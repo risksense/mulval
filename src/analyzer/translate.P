@@ -1,0 +1,449 @@
+/*
+Various translation interfaces for MulVAL interaction rules
+Author(s) : Xinming Ou
+Copyright (C) 2011, Argus Cybersecurity Lab, Kansas State University
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* Translate interaction rules into an output file according to Mode */
+translate_interaction_rules(Mode,  OutputFile) :-
+     tell(OutputFile),
+     transform_prolog_clauses(Mode, 
+	                      read_clause_from_database(interaction_rule(_,_)),
+			      write_clause_to_stdout),
+     told.
+
+
+/* Translate interaction rules into another form and assert the translated
+   rules into the XSB database */
+translate_interaction_rules(Mode) :-
+     transform_prolog_clauses(Mode, 
+	                      read_clause_from_database(interaction_rule(_,_)),
+			      assert),
+     told.
+
+
+/* Deprecated. Preprocess an interaction rule file for XSB justification.
+   FileName must be in the form of PgmFile.P, and the
+   outputfile is PgmFile_jxm.P                        */
+translate_interaction_rules(just, FileName) :-
+	!,
+	str_match('.P', FileName, rev, X, -1),
+        substring(FileName, 0, X, PgmFile),
+	translate_interaction_rules(justPrep, FileName),
+	jxm(PgmFile).
+
+
+/* Translate a Prolog file into another one according to Mode */
+translate(Mode, PgmFile, NewPgmFile) :-
+     tell(NewPgmFile),
+     see(PgmFile),
+     transform_prolog_clauses(Mode, read_clause_from_stream, write_clause_to_stdout),
+     seen,
+     told.
+
+
+/*  Generate "dynamic" declarations for primitive and meta predicates */
+generate_dynamic_decl(OutputFile) :-
+     tell(OutputFile),
+     transform_prolog_clauses(dynamic_decl, 
+	                      read_clause_from_database(primitive(_C)), 
+			      write_clause_to_stdout),
+/*
+     transform_prolog_clauses(dynamic_decl, 
+	                      read_clause_from_database(meta(_C)), 
+			      write_clause_to_stdout),
+*/
+     told.
+
+
+
+
+/*************************************************************************************/
+/*          Generic Datalog clause transforming functions                            */
+/*************************************************************************************/
+
+
+/* Function for transforming a number of Datalog clauses. */
+transform_prolog_clauses(Mode, Clause_retrieve_pred, Clause_emit_pred) :-
+	transform_prolog_clauses_prologue(Mode),
+	Clause_retrieve_call ^=.. [Clause_retrieve_pred, Clause],
+	Clause_retrieve_call,
+%	write(userout, 'Transforming in mode '), write(userout, Mode), write(userout, ':  '),
+%	write_canonical(userout, Clause), writeln(userout, ' ...'),
+	translate_prolog_clause(Mode, Clause, NewClause),
+%	write_canonical(userout, 'Result is: '), write_canonical(userout, NewClause), writeln(userout, '.'),
+	(NewClause = translate_empty
+               -> true;
+	       Clause_emit_call ^=.. [Clause_emit_pred, NewClause],
+	       Clause_emit_call),
+	fail.
+
+transform_prolog_clauses(Mode, _Clause_call_pred, Clause_emit_pred) :-
+	transform_prolog_clauses_epilogue(Mode, Clause_emit_pred).
+
+/* Preparation functions before transforming begins */
+transform_prolog_clauses_prologue(_Mode) :-
+	counter_init(ruleCounter),
+	counter_init(headTraceNumber).
+
+
+/* After-transforming operations for various modes */
+
+/* add C :- rule(_, C) for each derived predicate C */
+transform_prolog_clauses_epilogue(assertTrace, Clause_emit_pred) :-
+	!,
+	iterate(derived(C), (Clause_emit_call ^=.. 
+                                     [Clause_emit_pred, (:-(C, rule(_,C)))],
+			     Clause_emit_call)).
+
+transform_prolog_clauses_epilogue(dynamic_decl, Clause_emit_pred) :-
+	!,
+	Clause_emit_call ^=.. [Clause_emit_pred, :-(dynamic(trace_step(_,_)))],
+	Clause_emit_call,
+	writeln(userout, '@@@@@@@@@@@@@@Done transforming in mode dynamic_decl\n').
+
+/* A new clause for transform_prolog_clauses_epilogue should go here */
+
+transform_prolog_clauses_epilogue(_mode, _clause_emit_pred) :-
+	!,
+	write(userout, '@@@@@@@@@@@@@@Done transforming in mode '), writeln(userout, _mode), writeln(userout, '').
+
+
+/* Transform a single Datalog clause based on various modes */
+
+/* For a primitive predicate C, emit :-dynamic(C) */
+translate_prolog_clause(dynamic_decl,
+	                  primitive(C),
+			  (:- dynamic(C))) :- !.
+
+/* For a meta predicate C, emit :-dynamic(C) */
+translate_prolog_clause(dynamic_decl,
+	                  meta(C),
+			  (:- dynamic(C))) :- !.
+
+/* Assert a MulVAL interaction rule into the XSB database */
+translate_prolog_clause(stripExplanation, 
+	        interaction_rule(Rule, _Exp), Rule) :- !.
+
+/* deprecated */
+translate_prolog_clause(justPrep, C, CResult) :-
+	!,
+	translate_prolog_clause(stripExplanation, C, CResult).
+
+
+/* Add a trace number to each derived predicate in a rule, and a
+   "magic" computation on the numbers, to force
+   XSB exhaustively search all the rules  */
+translate_prolog_clause(addTraceNumber, interaction_rule(':-'(Head, Body), _Exp),
+                           ':-'(NewHead, ResultBody)) :-
+	!,
+	addTraceNumber_body(Body, NewBody, ListTraceNum),
+	(ListTraceNum = []
+              -> ResultBody = NewBody,
+                 counter_next(headTraceNumber, HeadTraceNumber);
+	    TraceNumLiteral =.. [magic|[HeadTraceNumber|ListTraceNum]],
+            ResultBody = 
+                  (NewBody, 
+                   TraceNumLiteral)),
+	addArgumentEnd(Head, HeadTraceNumber, NewHead).
+
+translate_prolog_clause(addTraceNumber, interaction_rule(Head, _Exp), NewHead) :-
+	!,
+	counter_next(headTraceNumber, N),
+	addArgumentEnd(Head, N, NewHead).
+
+
+/* deprecated */
+translate_prolog_clause(assertTrace, 
+	                interaction_rule(':-'(Head, Body), Exp),
+                        ':-'(rule(N,Head), NewBody)) :-
+	!,
+	counter_next(ruleCounter, N),
+	assertTrace_body(Body, NewBody, because(N, Exp, Head, [])).
+
+
+/* deprecated */
+translate_prolog_clause(assertTrace, 
+	        interaction_rule(Rule, Exp), ':-'(rule(N,Rule), 
+		                 assert_trace(because(N, Exp, Rule, [])))) :-
+	!,
+	counter_next(ruleCounter, N).
+
+
+/* Instrument a MulVAL interaction rule so that it records the execution trace */
+translate_prolog_clause(mvTrc, 
+	                interaction_rule(':-'(Head, Body), Exp),
+                        ':-'(mvTrc(Head), NewBody)) :-
+	!,
+	counter_next(ruleCounter, N),
+	trace_body(Body, NewBody, because(N, Exp, Head, [])).
+
+
+/* Instrument a MulVAL interaction rule so that it records the execution trace */
+translate_prolog_clause(mvTrc, 
+	        interaction_rule(Rule, Exp), ':-'(mvTrc(Rule), 
+		                 assert_trace(because(N, Exp, Rule, [])))) :-
+	!,
+	counter_next(ruleCounter, N).
+
+
+/* Instrument MulVAL interaction rules so that it records the complete execution trace */
+translate_prolog_clause(completeTrace, 
+	                interaction_rule(':-'(Head, Body), Exp),
+                        ':-'(mvTrc(NewHead), NewBody)) :-
+	!,
+	counter_next(ruleCounter, N),
+	completeTrace_body(Body, NewBody, because(N, Exp, Head, []), [], HeadTraceNumber),
+	addArgumentEnd(Head, HeadTraceNumber, NewHead).
+
+
+/* Instrument MulVAL interaction rules so that it records the complete execution trace */
+translate_prolog_clause(completeTrace, 
+	        interaction_rule(Rule, Exp), ':-'(mvTrc(NewHead), 
+		                 assert_trace(because(N, Exp, Rule, [])))) :-
+	!,
+	counter_next(ruleCounter, N),
+	addArgumentEnd(Rule, N, NewHead).
+
+/* Version 2: Instrument MulVAL interaction rules so that it records the complete execution trace */
+translate_prolog_clause(completeTrace2, 
+	                interaction_rule(':-'(Head, Body), Exp),
+                        ':-'(mvTrc(NewHead), NewBody)) :-
+	!,
+	counter_next(ruleCounter, N),
+	completeTrace2_body(Body, NewBody, because(N, Exp, Head, [])),
+	addArgumentEnd(Head, N, NewHead).
+
+
+/* Version 2: Instrument MulVAL interaction rules so that it records the complete execution trace */
+translate_prolog_clause(completeTrace2, 
+	        interaction_rule(Rule, Exp), ':-'(mvTrc(NewHead), 
+		                 assert_trace(because(N, Exp, Rule, [])))) :-
+	!,
+	counter_next(ruleCounter, N),
+	addArgumentEnd(Rule, N, NewHead).
+
+/* New clauses for other modes of translate_prolog_clause should go here */
+
+translate_prolog_clause(_mode, Rule, Rule).
+
+
+/* Add a trace number to each derived predicate in a rule body */
+addTraceNumber_body((SubGoal, Rest), (NewSubGoal, NewRest),
+	                   [TraceNum|ListTraceNum]) :-
+	derived(SubGoal),
+	!,
+	addArgumentEnd(SubGoal, TraceNum, NewSubGoal),
+	addTraceNumber_body(Rest, NewRest, ListTraceNum).
+
+addTraceNumber_body((SubGoal, Rest), (SubGoal, NewRest),
+	                   ListTraceNum) :-
+	(primitive(SubGoal); meta(SubGoal)),
+	!,
+	addTraceNumber_body(Rest, NewRest, ListTraceNum).
+
+
+addTraceNumber_body((SubGoal, Rest), (SubGoal, NewRest),
+	                   ListTraceNum) :-
+	!,
+	write(userout, '######################Warning: '), 
+	write(userout, SubGoal), 
+	writeln(userout, ' uses a predicate whose type (primitve/derive/meta) has not been declared.'),
+	addTraceNumber_body(Rest, NewRest, ListTraceNum).
+
+
+addTraceNumber_body(SubGoal, NewSubGoal, [TraceNum]) :-
+	derived(SubGoal),
+	!,
+	addArgumentEnd(SubGoal, TraceNum, NewSubGoal).
+
+addTraceNumber_body(SubGoal, SubGoal, []) :-
+	(primitive(SubGoal); meta),
+	!.
+
+addTraceNumber_body(SubGoal, SubGoal, []) :-
+	!,
+	write(userout, '######################Warning: '), 
+	write(userout, SubGoal), 
+	writeln(userout, ' uses a predicate whose type (primitve/derive/meta) has not been declared.').
+
+
+/* deprecated */
+assertTrace_body((SubGoal, Rest), (SubGoal, NewRest), 
+	                     because(RuleNum, Exp, Head, Cause)) :-
+	!,
+	assertTrace_body(Rest, NewRest,  
+	                     because(RuleNum, Exp, Head, [SubGoal|Cause])).
+
+/* deprecated */
+assertTrace_body(SubGoal, 
+ 	         (SubGoal, assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause]))),
+		 because(RuleNum, Exp, Head, Cause)).
+
+trace_body((SubGoal, Rest), (mvTrc(SubGoal), NewRest), 
+	                     because(RuleNum, Exp, Head, Cause)) :-
+	derived(SubGoal),
+	!,
+	trace_body(Rest, NewRest,  
+	                     because(RuleNum, Exp, Head, [SubGoal|Cause])).
+
+trace_body((SubGoal, Rest), (SubGoal, NewRest), 
+	                     because(RuleNum, Exp, Head, Cause)) :-
+	primitive(SubGoal),
+	!,
+	trace_body(Rest, NewRest,  
+	                     because(RuleNum, Exp, Head, [SubGoal|Cause])).
+
+trace_body((SubGoal, _Rest), _, _) :- 
+	!,
+	write(userout, '######################Warning: '), 
+	write(userout, SubGoal), 
+	writeln(userout, ' is neither defined as derived nor primitive').
+
+
+trace_body(SubGoal, 
+ 	         (mvTrc(SubGoal), assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause]))),
+		 because(RuleNum, Exp, Head, Cause)) :-
+	derived(SubGoal),
+	!.
+
+trace_body(SubGoal, 
+ 	         (SubGoal, assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause]))),
+		 because(RuleNum, Exp, Head, Cause)) :-
+	primitive(SubGoal),
+	!.
+
+
+trace_body(SubGoal, _, _) :- 
+	!,
+	write(userout, '######################Warning: '), 
+	write(userout, SubGoal), 
+	writeln(userout, ' is neither defined as derived nor primitive').
+
+
+completeTrace_body((SubGoal, Rest), (mvTrc(NewSubGoal), NewRest), 
+	                     because(RuleNum, Exp, Head, Cause), ListTraceNum, HeadTraceNumber) :-
+	derived(SubGoal),
+	!,
+	addArgumentEnd(SubGoal, TraceNum, NewSubGoal),
+	completeTrace_body(Rest, NewRest,  
+	                     because(RuleNum, Exp, Head, [SubGoal|Cause]),
+	                     [TraceNum|ListTraceNum], HeadTraceNumber).
+
+completeTrace_body((SubGoal, Rest), (SubGoal, NewRest), 
+	                     because(RuleNum, Exp, Head, Cause), ListTraceNum, HeadTraceNumber) :-
+	(primitive(SubGoal); meta(SubGoal)),
+	!,
+	completeTrace_body(Rest, NewRest,  
+	                     because(RuleNum, Exp, Head, [SubGoal|Cause]),
+	                     ListTraceNum, HeadTraceNumber).
+
+completeTrace_body((SubGoal, Rest), (SubGoal, NewRest), 
+	                     because(RuleNum, Exp, Head, Cause), ListTraceNum, HeadTraceNumber) :-
+	!,
+	write(userout, '######################Warning: '), 
+	write(userout, SubGoal), 
+	writeln(userout, ' uses a predicate whose type (primitve/derive/meta) has not been declared.'),
+	completeTrace_body(Rest, NewRest,  
+	                     because(RuleNum, Exp, Head, [SubGoal|Cause]),
+	                     ListTraceNum, HeadTraceNumber).
+
+
+completeTrace_body(SubGoal, 
+ 	         (mvTrc(NewSubGoal), TraceNumLiteral, assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause]))),
+		 because(RuleNum, Exp, Head, Cause), ListTraceNum, HeadTraceNumber) :-
+	derived(SubGoal),
+	!,
+	addArgumentEnd(SubGoal, TraceNum, NewSubGoal),
+	ArgsList = [HeadTraceNumber|[RuleNum|[TraceNum|ListTraceNum]]],
+	TraceNumLiteral =.. [magic|ArgsList].
+
+completeTrace_body(SubGoal, 
+ 	         NewSubGoal,
+		 because(RuleNum, Exp, Head, Cause), ListTraceNum, HeadTraceNumber) :-
+	(primitive(SubGoal); meta(SubGoal)),
+	!,
+	(ListTraceNum = []
+	  -> NewSubGoal = (SubGoal, assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause]))),
+	     HeadTraceNumber = RuleNum;
+  	  ArgsList = [HeadTraceNumber|[RuleNum|ListTraceNum]],
+	  TraceNumLiteral =.. [magic|ArgsList],
+	  NewSubGoal = (SubGoal, TraceNumLiteral, assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause])))).
+
+
+completeTrace_body(SubGoal, 
+ 	         NewSubGoal,
+		 because(RuleNum, Exp, Head, Cause), ListTraceNum, HeadTraceNumber) :-
+	!,
+	write(userout, '######################Warning: '), 
+	write(userout, SubGoal), 
+	writeln(userout, ' uses a predicate whose type (primitve/derive/meta) has not been declared.'),
+	(ListTraceNum = []
+	  -> NewSubGoal = (SubGoal, assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause]))),
+	     HeadTraceNumber = RuleNum;
+  	  ArgsList = [HeadTraceNumber|[RuleNum|ListTraceNum]],
+	  TraceNumLiteral =.. [magic|ArgsList],
+	  NewSubGoal = (SubGoal, TraceNumLiteral, assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause])))).
+
+
+completeTrace2_body((SubGoal, Rest), (mvTrc(NewSubGoal), NewRest), 
+	                     because(RuleNum, Exp, Head, Cause)) :-
+	derived(SubGoal),
+	!,
+	addArgumentEnd(SubGoal, _TraceNum, NewSubGoal),
+	completeTrace2_body(Rest, NewRest,  
+	                     because(RuleNum, Exp, Head, [SubGoal|Cause])).
+
+completeTrace2_body((SubGoal, Rest), (SubGoal, NewRest), 
+	                     because(RuleNum, Exp, Head, Cause)) :-
+	(primitive(SubGoal); meta(SubGoal)),
+	!,
+	completeTrace2_body(Rest, NewRest,  
+	                     because(RuleNum, Exp, Head, [SubGoal|Cause])).
+
+completeTrace2_body((SubGoal, Rest), (SubGoal, NewRest), 
+	                     because(RuleNum, Exp, Head, Cause)) :-
+	!,
+	write(userout, '######################Warning: '), 
+	write(userout, SubGoal), 
+	writeln(userout, ' uses a predicate whose type (primitve/derive/meta) has not been declared.'),
+	completeTrace2_body(Rest, NewRest,  
+	                     because(RuleNum, Exp, Head, [SubGoal|Cause])).
+
+
+completeTrace2_body(SubGoal, 
+ 	         (mvTrc(NewSubGoal), assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause]))),
+		 because(RuleNum, Exp, Head, Cause)) :-
+	derived(SubGoal),
+	!,
+	addArgumentEnd(SubGoal, _TraceNum, NewSubGoal).
+
+completeTrace2_body(SubGoal, 
+ 	         (SubGoal, assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause]))),
+		 because(RuleNum, Exp, Head, Cause)) :-
+	(primitive(SubGoal); meta(SubGoal)),
+	!.
+
+
+completeTrace2_body(SubGoal, 
+ 	         (SubGoal, assert_trace(because(RuleNum, Exp, Head, [SubGoal|Cause]))),
+		 because(RuleNum, Exp, Head, Cause)) :-
+	!,
+	write(userout, '######################Warning: '), 
+	write(userout, SubGoal), 
+	writeln(userout, ' uses a predicate whose type (primitve/derive/meta) has not been declared.').
+
+

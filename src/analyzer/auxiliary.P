@@ -1,0 +1,148 @@
+% MulVAL auxiliary plugin functions
+% Author : Xinming Ou
+% Copyright (C) 2011, Argus Cybersecurity Lab, Kansas State University
+
+% This program is free software: you can redistribute it and/or modify
+% it under the terms of the GNU General Public License as published by
+% the Free Software Foundation, either version 3 of the License, or
+% (at your option) any later version.
+% 
+% This program is distributed in the hope that it will be useful,
+% but WITHOUT ANY WARRANTY; without even the implied warranty of
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+% GNU General Public License for more details.
+% 
+% You should have received a copy of the GNU General Public License
+% along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+:- table capability_to_exploit_software/2.
+:- import length/2 from lists.
+:- dynamic dominates/2, postdominates/2.
+
+capability_to_exploit_software(Software, CapLevel) :-
+	vulExists(_H, ID, Software),
+	capability_required(ID, CapLevel).
+
+capability_level_subsumes(h, m).
+capability_level_subsumes(m, l).
+capability_level_subsumes(h, l).
+
+
+interSubnet(S1, S2) :-
+	hacl(H1, H2, _, _),
+	inSubnet(H1, S1),
+	inSubnet(H2, S2),
+	(S1 @< S2; S2 @< S1).
+	
+writeEdges :-
+	findall(isGoal(GoalHost), attackGoal(execCode(GoalHost, _)), IsGoalHosts),
+	list_apply(IsGoalHosts, assert), 
+	attackerLocated(AttackerLoc),
+	inSubnet(AttackerLoc, AttackerSubnet),
+	writeln(AttackerSubnet),
+	findall([Subnet1,Subnet2], interSubnet(Subnet1,Subnet2), Transitions),
+	length(IsGoalHosts, N),
+	(N>1 ->
+	    writeln(virtualGoal),
+	    list_apply(IsGoalHosts, writeVirtualLink);
+	    (N>0 ->
+		attackGoal(execCode(GoalHost, _)),
+		inSubnet(GoalHost, GoalSubnet),
+		writeln(GoalSubnet);
+		error_writeln('Error: no attack goal defined!'),
+		fail)
+	    ),
+	list_apply(Transitions, writeln).
+
+writeVirtualLink(isGoal(GoalHost)) :-
+	inSubnet(GoalHost, GoalSubnet),
+	writeln([GoalSubnet, virtualGoal]).
+	
+writeWithPeriod(Data) :-
+	write(Data),
+	writeln('.').
+	
+loadDominators(Filename) :-
+	load_dyn(Filename),
+	findall(dominates(X,Y), dom(X,Y), DomList),
+	findall(postdominates(A,B), postdom(A,B), PostdomList),
+	tell(Filename),
+	list_apply(DomList, writeWithPeriod),
+	list_apply(PostdomList, writeWithPeriod),
+	told,
+	load_dyn(Filename).
+	
+	
+dom(S1, S2) :-
+	dominates(S1, S2).
+
+dom(S1, S3) :-
+	dominates(S1, S2),
+	dom(S2, S3).
+
+postdom(S2, S1) :-
+	postdominates(S2, S1).
+
+postdom(S3, S1) :-
+	postdominates(S3, S2),
+	postdom(S2, S1).
+
+outgoing(H1, S2) :-
+	hacl(H1, H2, _, _),
+	inSubnet(H1, S1),
+	inSubnet(H2, S2),
+	(S1 @< S2; S2 @< S1).	
+
+write_policy( PrimitiveFilename, DerivedFilename, PolicyFilename ) :-
+    tell( PrimitiveFilename ),
+    iterate( primitive_fact(Var, Fact), cost(Var, Fact) ),
+    told,
+    tell( DerivedFilename ),
+    iterate( derived_fact(Var, Fact), cost(Var, Fact) ),
+    told,
+    tell( PolicyFilename ),
+    iterate( forced_true(Fact), writeTrue(Fact) ),
+    iterate( forced_false(Fact), writeFalse(Fact) ),
+    told.
+
+writeTrue( Fact ) :-
+    primitive_fact(Var, Fact),
+    write(Var),
+    writeln(' T').
+
+writeTrue( Fact ) :-
+    derived_fact(Var, Fact),
+    write(Var),
+    writeln(' T').
+
+writeFalse( Fact ) :-
+    primitive_fact(Var, Fact),
+    write(Var),
+    writeln(' F').
+
+writeFalse( Fact ) :-
+    derived_fact(Var, Fact),
+    write(Var),
+    writeln(' F').
+
+write_cost_mapping( PrimitiveFilename, DerivedFilename ) :-
+	   tell( PrimitiveFilename ),
+	   iterate( primitive_fact(Var, Fact), cost(Var, Fact) ),
+	   told,
+	   tell( DerivedFilename ),
+	   iterate( derived_fact(Var, Fact), cost(Var, Fact) ),
+	   told.
+
+writeCost( Var, Cost ) :-
+	write(Var),
+	write(' '),
+	writeln(Cost).
+	   
+/* Open tuple, to match otherwise uncaught clauses */
+/* Default - should not be used */
+cost( Var, Fact ) :-
+	!,
+	write(Var),
+	writeln(' 999').
+

@@ -1,0 +1,64 @@
+
+:- import member/2 from lists.
+hasEffect(privEscalation).
+
+vulExists(Host, CVE, Prog):- 
+  vuln_exists(Host, CVE, Prog, _Range, _Losstype, _Severity, _AC ).
+
+vulExists(Host, CVE, Prog):- 
+  vuln_exists(Host, CVE, Prog, _Range, _Losstype, _Severity, _AC, Port, Prot ).
+
+vulProperty(CVE, localExploit, Effect):- 
+  vuln_exists(_Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC ),
+  member(local,RangeList),
+  lossTypetoEffect(Losstype, Effect).
+
+vulProperty(CVE, remoteExploit, Effect, Port, Prot):- 
+  vuln_exists(_Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC, Port, Prot ),
+  member(remoteExploit,RangeList),
+  not  member(user_action_req,RangeList),
+  lossTypetoEffect(Losstype, Effect).
+
+vulProperty(CVE, remoteExploit, Effect):- 
+  vuln_exists(_Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC, _Port, _Prot ),
+  member(remoteExploit,RangeList),
+  not  member(user_action_req,RangeList),
+  lossTypetoEffect(Losstype, Effect).
+
+
+vulProperty(CVE, remoteClient, Effect):- 
+  vuln_exists(_Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC ),
+  member(remoteExploit,RangeList),
+  member(user_action_req,RangeList),
+  lossTypetoEffect(Losstype, Effect).
+
+
+lossTypetoEffect(Losstype, Effect):-
+            member('data_modification', Losstype),
+            hasEffect(Effect).
+
+lossTypetoEffect(Losstype, Effect):-
+            member('data_loss', Losstype),
+            hasEffect(Effect).
+
+cvss(CVE, AC):-
+	vuln_exists(Host, CVE, Prog, _RangeList, _Losstype, _Severity, AC ).
+
+cvss(CVE, AC):-
+        vuln_exists(_Host, CVE, _Prog, RangeList,Losstype, _Severity, AC, Port, Prot ).
+
+networkServiceInfo(Host, Program, Prot, Port, someUser) :-
+	vulExists(Host, CVE, Program),
+        vulProperty(CVE, remoteExploit, _Effect, Port, Prot).
+
+%hacl(Host, internet, Prot, Port) :-
+ %       vuln_exists(Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC, Port, Prot ).
+
+%hacl(internet, Host, Prot, Port) :-
+ %      vuln_exists(Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC, Port, Prot ).
+
+%this is not corrent, because it binds the CVE Port and Prot together which couldn't be true.
+%hacl(Host, Host2, Prot, Port) :-
+ %      vuln_exists(Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC, Port, Prot ),
+  %     vuln_exists(Host2, CVE, _Prog, RangeList,Losstype, _Severity, _AC, Port, Prot ).
+

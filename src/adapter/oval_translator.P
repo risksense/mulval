@@ -1,0 +1,35 @@
+
+:- import member/2 from lists.
+hasEffect(privEscalation).
+
+vulExists(Host, CVE, Prog):- 
+  vuln_exists(Host, CVE, Prog, _Range, _Losstype, _Severity, _AC ).
+
+vulProperty(CVE, localExploit, Effect):- 
+  vuln_exists(_Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC ),
+  member(local,RangeList),
+  lossTypetoEffect(Losstype, Effect).
+
+vulProperty(CVE, remoteExploit, Effect):- 
+  vuln_exists(_Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC ),
+  member(remoteExploit,RangeList),
+  not  member(user_action_req,RangeList),
+  lossTypetoEffect(Losstype, Effect).
+
+vulProperty(CVE, remoteClient, Effect):- 
+  vuln_exists(_Host, CVE, _Prog, RangeList,Losstype, _Severity, _AC ),
+  member(remoteExploit,RangeList),
+  member(user_action_req,RangeList),
+  lossTypetoEffect(Losstype, Effect).
+
+
+lossTypetoEffect(Losstype, Effect):-
+            member('data_modification', Losstype),
+            hasEffect(Effect).
+
+cvss(CVE, AC):-
+	vuln_exists(Host, CVE, Prog, _RangeList, _Losstype, _Severity, AC ).
+
+networkServiceInfo(Host, Program, someProtocol, somePort, someUser) :-
+	vulExists(Host, CVE, Program),
+	vulProperty(CVE, remoteExploit, _Effect).

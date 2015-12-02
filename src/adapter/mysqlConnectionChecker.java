@@ -17,8 +17,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -28,85 +26,45 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
-
 public class mysqlConnectionChecker {
 
-	
 	public static void main(String[] args) {
-
 		try {
 			getConnection();
-			
-			//if the connection couldn't be established, then
-			//writeConnectionSucc will not be called.
+			//if the connection couldn't be established, then `writeConnectionSucc` will not be called.
 			writeConnectionSucc();
 		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			//System.out.println("sql exception invoked");
 		    System.err.println("NVD DB connection cannot be established");
-					
 		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
 		    System.err.println("class Not found error");
-					
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 		    System.err.println("IO error");
-					
 		}
 	}
 
 	private static void writeConnectionSucc() {
-
 		try {
 			FileWriter fr = new FileWriter("connectionSucc.txt");
-
 			fr.close();
-		
 		} catch (IOException e) {
-
 			System.err.println("IO error");
-
 		}
-		
-		
-		
 	}
 
 	public static Connection getConnection() throws SQLException,
-
 	java.lang.ClassNotFoundException, IOException {
-
-//String url = "jdbc:mysql://localhost:3306/mulvalDB";
-
-Class.forName("com.mysql.jdbc.Driver");
-
-//String userName = "root";
-
-//String password = "";
-
-String url="";
-
-String userName="";
-
-String password="";
-
-File f= new File("config.txt");
-
-String path = f.getPath();
-
-	BufferedReader breader= new BufferedReader(new FileReader(path));
-
-	url=breader.readLine();
-
-	userName=breader.readLine();
-
-//	System.out.println(userName);
-	password=breader.readLine();
-
-	Connection con = DriverManager.getConnection(url, userName, password);
-
-	return con;	
-
-}
+		Class.forName("com.mysql.jdbc.Driver");
+		String url = "";
+		String userName = "";
+		String password = "";
+		File f = new File("config.txt");
+		String path = f.getPath();
+		BufferedReader breader = new BufferedReader(new FileReader(path));
+		url = breader.readLine();
+		userName = breader.readLine();
+		password = breader.readLine();
+		Connection con = DriverManager.getConnection(url, userName, password);
+		breader.close();
+		return con;	
+	}
 }

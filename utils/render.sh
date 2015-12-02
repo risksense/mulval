@@ -38,12 +38,16 @@ do
       --simple)
       simple=true ;;
 
+      --nopdf)
+      nopdf=true ;;
+
       *)
 #      -h | --help)
       cat <<EOF
 Usage: render.sh [--arclabel]
                  [--reverse]
                  [--simple]
+                 [--nopdf]
                  [-h|--help]
 EOF
       exit ;;
@@ -86,11 +90,16 @@ fi
 
 echo } >> AttackGraph.dot
 
-dot -Tps AttackGraph.dot > AttackGraph.eps
-epstopdf AttackGraph.eps
-
-echo "If successfully produced, the attack graph should be in AttackGraph.pdf"
-
-if test -n "$PDF_READER"; then
-    $PDF_READER AttackGraph.pdf&
+if test -n "$nopdf"; then
+  echo "Skipping pdf generation"
+else
+  echo "Generating pdf from dot file"
+  dot -Tps AttackGraph.dot > AttackGraph.eps
+  epstopdf AttackGraph.eps
+  echo "If successfully produced, the attack graph should be in AttackGraph.pdf"
+  if test -n "$PDF_READER"; then
+      $PDF_READER AttackGraph.pdf&
+  fi
 fi
+
+

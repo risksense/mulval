@@ -61,7 +61,7 @@ do
       -l)
       CSVOutput=true;;
 
-      --arclabel | --reverse | --simple | --nometric)
+      --arclabel | --reverse | --simple | --nometric | --nopdf)
       VISUALIZATION_OPTS="$VISUALIZATION_OPTS $ac_option" ;;
 
       -s | --sat)
@@ -100,7 +100,7 @@ Usage: graph_gen.sh [-r|--rule rulefile]
 		    [-s|--sat]
 		    [-t|--t trace_option]
 		    [-tr|--trim]
-		    [-v|--visualize [--arclabel] [--reverse]]
+		    [-v|--visualize [--arclabel] [--reverse] [--nopdf]]
                     [--cvss]
 	            [-h|--help]
 	            [attack_graph_options]

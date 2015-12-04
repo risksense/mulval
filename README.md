@@ -61,8 +61,9 @@ is run. So it is a good idea to run it in a separate folder to avoid cluttering.
 
   `--nometric`: do not show the metric information
 
-  `--simple`:   do not show the vertex fact labels. *Use this option when attack graph becomes too big to visualize.*
+  `--simple`: do not show the vertex fact labels. *Use this option when attack graph becomes too big to visualize.*
 
+  `--nopdf`: do not generate pdf. *Use this option when you want the DOT file but not the PDF.*
 
 After you have run the `graph_gen.sh` script, you can also invoke the `render.sh` to use the
 different rendering options. Simply issue the `render.sh` command in the same directory, 
@@ -75,7 +76,7 @@ different rendering options. Simply issue the `render.sh` command in the same di
 This package contains a number of adapter programs to aid in creating MulVAL input files
 from an enterprise network. A number of steps need to be taken as outlined below.
 
- 1. Set up an empty MySQL database for storing NVD data, and put the database connection information
+1. Set up an empty MySQL database for storing NVD data, and put the database connection information
 into config.txt in a directory where you want to run the MulVAL adapters.
 Example config.txt:
 jdbc:mysql://www.abc.edu:3306/nvd
@@ -84,58 +85,50 @@ password
 Then you can populate the NVD database by typing "nvd_sync.sh". This needs to be done as often
 as desired to keep the local MySQL database in sync with NVD. 
 
- 2. Translating OVAL/Nessus report into Datalog format.
+2. Translating OVAL/Nessus report into Datalog format.
+  * For OVAL: `oval_translate.sh XML_REPORT_FROM_IN_OVAL`
+    * The first parameter is the xml file of OVAL scanning result. The output will be in oval.P, summ_oval.P, and grps_oval.P.
+    * oval.P is raw input to MulVAL.
+    * summ_oval.P is a summarized input after performing grouping as outlined in [3]. This input file is to be used with the `-ma` option. (grps_oval.P contains mapping from vuln groups to raw vuln's)
 
-  - For OVAL: `oval_translate.sh XML_REPORT_FROM_IN_OVAL`
+  * For NESSUS: `nessus_translate.sh XML_REPORT_FROM_NESSUS`
+    * The first parameter is the XML file of NESSUS scanning result.
+    * The output will be in nessus.P, summ_nessus.P, and grps_nessus.P
+    * nessus.P is the raw input to MulVAL
+    * summ_nessus.P is a summarized input after performing grouping as outlined in [3]. This input file is to be used with the `-ma` option. (grps_nessus.P contains mapping from vuln groups to raw vuln's)
 
-   -- The first parameter is the xml file of OVAL scanning result. The output will be in oval.P, summ_oval.P, and grps_oval.P.
-
-   -- oval.P is raw input to MulVAL.
-
-   -- summ_oval.P is a summarized input after performing grouping as outlined in [3]. This input file is to be used with the `-ma` option. (grps_oval.P contains mapping from vuln groups to raw vuln's)
-
-  - For NESSUS: `nessus_translate.sh XML_REPORT_FROM_NESSUS`
-
-    -- The first parameter is the XML file of NESSUS scanning result.
-
-    -- The output will be in nessus.P, summ_nessus.P, and grps_nessus.P
-
-    -- nessus.P is the raw input to MulVAL 
-
-    -- summ_nessus.P is a summarized input after performing grouping as outlined in [3]. This input file is to be used with the `-ma` option. (grps_nessus.P contains mapping from vuln groups to raw vuln's)
-
- 3. Creating hacl tuples
+3. Creating hacl tuples
 
   We assume all machines within the same scanning report can be reached by each other freely. The connection information can be customized as hacl(Host1, Host2, Protocol, Port) in the MulVAL 
 input file. All the translated input files will then need to be combined into a single input file.
 
- 4. Creating MulVAL attack graph
+4. Creating MulVAL attack graph
 
   Once the input file is created, please refer to the instruction in section I to generate attack graph.
 
 ####Advanced Usage
 
- 1. Creating customized rule set.
+1. Creating customized rule set.
 
- To develop your own interaction rules, you can create new rule files, e.g. "my_interaction_rules.P", and use the `-r` or `-a` options to load your rule files. The default rule files can be found under 
+  To develop your own interaction rules, you can create new rule files, e.g. "my_interaction_rules.P", and use the `-r` or `-a` options to load your rule files. The default rule files can be found under 
 the kb/ folder in this package.
 
- At the beginning of a rule file, you must declare the primitive and derived predicates, and table all derived predicates. Facts with primitive predicates come from the input, and facts with derived predicates are defined by the interaction rules. Every predicate used by the interaction rules must have a declaration of either "primitive" or "derived", otherwise you may get an error message of "undefined predicate" during evaluation, and the attack graph generation may fail with a warning message telling you which predicate's declaration is missing. Tabling will prevent the XSB reasoning engine from entering an infinite loop and increase the efficiency of reasoning by memoizing intermediate
+  At the beginning of a rule file, you must declare the primitive and derived predicates, and table all derived predicates. Facts with primitive predicates come from the input, and facts with derived predicates are defined by the interaction rules. Every predicate used by the interaction rules must have a declaration of either "primitive" or "derived", otherwise you may get an error message of "undefined predicate" during evaluation, and the attack graph generation may fail with a warning message telling you which predicate's declaration is missing. Tabling will prevent the XSB reasoning engine from entering an infinite loop and increase the efficiency of reasoning by memoizing intermediate
 results.
 
- Each interaction rule is introduced by "interaction_rule(Rule, Label)", where Rule is a Datalog rule and Label is some plain-text explaining its meaning. The labels will become annotations in attack graph. 
+  Each interaction rule is introduced by "interaction_rule(Rule, Label)", where Rule is a Datalog rule and Label is some plain-text explaining its meaning. The labels will become annotations in attack graph. 
 Once you have developed your own rule set, you can test it by using the `-r RULEFILE` option with `graph_gen.sh` to let it load RULEFILE instead of using the default ruleset. If you want your rule file to be added to the default ruleset, you can use the `-a RULEFILE` option instead.
 
- 2. Calculating risk metrics based on CVSS and MulVAL attack graph
+2. Calculating risk metrics based on CVSS and MulVAL attack graph
 
- We have included a quantitative risk assessment algorithm based on Wang et al. [4]. It combines the CVSS metrics and the attack graph to compute a probabilistic risk metrics for the enterprise
+  We have included a quantitative risk assessment algorithm based on Wang et al. [4]. It combines the CVSS metrics and the attack graph to compute a probabilistic risk metrics for the enterprise
 network. To run the metric program, type in the following command where the attack-graph output is located:
 `probAssess.sh`
 
- There is also a script that integrates multiple steps: creating MulVAL attack graph, running the risk metrics algorithm and display the attack graph with metrics:
+  There is also a script that integrates multiple steps: creating MulVAL attack graph, running the risk metrics algorithm and display the attack graph with metrics:
 `riskAssess.sh INPUT [OPTIONS]`
 
- It will run MulVAL on the input file. This script will always use the -ma (modeling artifact) 
+  It will run MulVAL on the input file. This script will always use the -ma (modeling artifact) 
 option to generate attack graph. Please use summ_oval.P (generated by oval_translate.sh) or summ_nessus.P (generated by nessus_translate.sh) as the INPUT. Use OPTIONS to pass any additional 
 options to the MulVAL attack-graph generator (graph_gen.sh)
 

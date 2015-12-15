@@ -36,7 +36,7 @@ if [ -r connectionSucc.txt ]; then
     echo 'connection tested successfully'
 else
 # echo 'connection cannot be established'
- exit 1
+    exit 1
 fi
 
 java -cp $CLASSPATH NessusXMLParser $1
@@ -44,8 +44,8 @@ java -cp $CLASSPATH NessusXMLParser $1
 if grep -qF "CVE" vulInfo.txt; then
     echo 'vulnerability(ies) detected'
 else
- echo 'no vulnerability detected'
- exit 1
+    echo 'no vulnerability detected'
+    exit 1
 fi
 
 
@@ -81,7 +81,14 @@ if [ ! -e nessus.P ]; then
 fi
 
 cat accountinfo.P >> nessus.P
-echo "hacl(_,_,_,_).">>nessus.P
+
+if [ -z "$2" ]; then
+	echo "Firewall rules missing."
+	echo "hacl(_,_,_,_).">>nessus.P
+else
+	echo "Firewall rules provided."
+	cat $2 >> nessus.P
+fi
 #cat $ADAPTERSRCPATH/client_software.P>> nessus.P
 echo "Output can be found in nessus.P."
 
@@ -90,5 +97,11 @@ echo "Output can be found in nessus.P."
 # Perform summarization
 nessus_vul_summary.sh nessus.P
 cat accountinfo.P >>summ_nessus.P
-echo "hacl(_,_,_,_).">>summ_nessus.P
+
+if [ -z "$2" ]; then
+    echo "hacl(_,_,_,_).">>summ_nessus.P
+else
+    cat $2 >> summ_nessus.P
+fi
 #cat $ADAPTERSRCPATH/client_software.P >> summ_nessus.P
+

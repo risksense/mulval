@@ -91,8 +91,9 @@ as desired to keep the local MySQL database in sync with NVD.
     * oval.P is raw input to MulVAL.
     * summ_oval.P is a summarized input after performing grouping as outlined in [3]. This input file is to be used with the `-ma` option. (grps_oval.P contains mapping from vuln groups to raw vuln's)
 
-  * For NESSUS: `nessus_translate.sh XML_REPORT_FROM_NESSUS`
+  * For NESSUS: `nessus_translate.sh XML_NESSUS_REPORT [FIREWALL_RULES]`
     * The first parameter is the XML file of NESSUS scanning result.
+    * Optional second parameter is a file containing firewall rules in datalog format. For example `hacl('10.1.2.3', '172.28.2.5', udp, _).` One hacl is defined per line. All rules from this file will be written to `nessus.P` file. If this parameter is missing, then a default rule `hacl(_, _, _, _).` will be written.
     * The output will be in nessus.P, summ_nessus.P, and grps_nessus.P
     * nessus.P is the raw input to MulVAL
     * summ_nessus.P is a summarized input after performing grouping as outlined in [3]. This input file is to be used with the `-ma` option. (grps_nessus.P contains mapping from vuln groups to raw vuln's)

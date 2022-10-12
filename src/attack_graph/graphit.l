@@ -1,8 +1,9 @@
 %{
 #include <stdio.h>
-#include "y.tab.cpp.h"
+//#include "y.tab.cpp.h"
+#include "graphit.tab.h"
 #define YYSTYPE char * 
-YYSTYPE* mylval;
+extern YYSTYPE* mylval;
 FILE **my_ptr = &yyin; 
 %}
 

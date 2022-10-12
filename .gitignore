@@ -1,0 +1,81 @@
+# Prerequisites
+*.d
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.exp
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Kernel Module Compile Results
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+*.class
+*.xwam
+*.output
+graphit.tab.c
+graphit.tab.h 
+lex.yy.c
+ARCS.CSV
+VERTICES.CSV
+
+src/attack_graph/attack_graph
+bin/attack_graph
+testcases/**/*.dot
+testcases/**/*.eps
+testcases/**/*.xml
+testcases/**/*.pdf
+testcases/**/*.txt
+testcases/**/xsb_log.txt
+testcases/**/run.P
+testcases/**/dynamic_decl.gen
+testcases/**/environment.P
+testcases/**/metric.P
+testcases/**/running_rules.P
+testcases/**/trace_output.P
+testcases/**/translated_rules.P
+
+
+!bin/adapter/.keep
+!bin/metrics/.keep

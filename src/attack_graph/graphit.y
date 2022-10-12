@@ -21,7 +21,7 @@
        }
     }
 
-    extern graph_data data;
+    extern graph_data gdata;
 
     #define MAXLEN 1000
     #define CVSSAC_PREFIX "cvss_ac_"
@@ -76,18 +76,18 @@ blank_line: END_LINE
 
 predicate_type: PRIMITIVE '(' ATOM ',' ATOM ')' '.' END_LINE
                      {
-                        data.all_predicates.add_predicate( $3, atoi($5), 
+                        gdata.all_predicates.add_predicate( $3, atoi($5), 
                                       primitive);
                      }
               | DERIVED   '(' ATOM ',' ATOM ')' '.' END_LINE
                      {
-                        data.all_predicates.add_predicate( $3, atoi($5), 
+                        gdata.all_predicates.add_predicate( $3, atoi($5), 
                                      derived);
                      }
 
               | META   '(' ATOM ',' ATOM ')' '.' END_LINE
                      {
-                        data.all_predicates.add_predicate( $3, atoi($5), 
+                        gdata.all_predicates.add_predicate( $3, atoi($5), 
                                      meta);
                      }
 
@@ -125,11 +125,11 @@ trace_step:
            #endif
 
            // save unique trace step
-           data.all_trace_steps.add_step( trace_step_key,
+           gdata.all_trace_steps.add_step( trace_step_key,
 	   			  rulenum, metric_str, fact1, factQ);
 
            // save unique rule
-           data.ruleList.add_rule(rulenum, desc_str);
+           gdata.ruleList.add_rule(rulenum, desc_str);
 
            #ifdef DEBUG 
            printf("possible_duplicate_trace_step(because(%s)).\n\n",
@@ -202,7 +202,7 @@ attack_fact:
                 #ifdef DEBUG 
                 printf("attack(%s).\n\n",fact1_str);
                 #endif
-		data.goals[fact1_str] = NULL;
+		gdata.goals[fact1_str] = NULL;
                 fact1_str[0] = 0;
                 lastFact=0;
 		fact1=0;
@@ -308,11 +308,11 @@ fact:  ATOM '(' arglist ')'
 
                     // get the pointer to correct predicate 
                     Predicate *p = 
-                     data.all_predicates.add_predicate( $1, arg_count, undef);
+                     gdata.all_predicates.add_predicate( $1, arg_count, undef);
 
                     // add this fact to the fact list, unless 
                     // it is already in the list. 
-                    lastFact=data.all_facts.add_fact( fact_ptr,p, arglist_p);
+                    lastFact=gdata.all_facts.add_fact( fact_ptr,p, arglist_p);
                     if( first_fact) fact1 = lastFact;
 
                     // empty the list for building next fact string

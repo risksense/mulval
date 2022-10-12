@@ -94,7 +94,7 @@ metric_map mp[] = {
 
 int size_mp = 10;
 
-graph_data data(mp, size_mp); 
+graph_data gdata(mp, size_mp); 
 
 // initialize static members
 //Fact *graph_data::goal =0;
@@ -176,7 +176,7 @@ TraceStep::TraceStep(int r, char *m, Fact *f, Conjunct *c) {
     metric = atof(m);
   }
   else{
-    metric = data.metrics[m];
+    metric = gdata.metrics[m];
   }
   
   fact = f; 
@@ -781,7 +781,7 @@ void RenderRule( renderMode mode, int indent, int rulenum )
    switch (mode) {
       case  TEXT:
         cout << indentation << "RULE " << rulenum << " : " 
-             << data.ruleList.rules[rulenum] << endl;
+             << gdata.ruleList.rules[rulenum] << endl;
       break;
   
       case HTML:
@@ -799,7 +799,7 @@ void RenderRule( renderMode mode, int indent, int rulenum, int nodeNum )
    switch (mode) {
       case  TEXT:
         cout << indentation << "(" << nodeNum << ") " << "RULE " << rulenum << " : " 
-             << data.ruleList.rules[rulenum] << endl;
+             << gdata.ruleList.rules[rulenum] << endl;
       break;
   
       case HTML:
@@ -843,7 +843,7 @@ bool OrNode::Render2(arcLabelMode mode)
 bool AndNode::Render2(arcLabelMode mode)
 {
    ostringstream temp;
-   temp << "RULE " << rulenum  << " (" << data.ruleList.rules[rulenum] << ")";
+   temp << "RULE " << rulenum  << " (" << gdata.ruleList.rules[rulenum] << ")";
    outputVertex(temp.str(), metric);
    for(Arc *arc=outGoing.gethead(); arc != NULL; arc=outGoing.getnext()) {
      if (arc->getDst()->Render2(mode))
@@ -1131,7 +1131,7 @@ int main(int argc, char *argv[]  )
 
    //dump_tables();
    //
-   if (data.goals.size() == 0){
+   if (gdata.goals.size() == 0){
      cerr << "No attack paths found.\n";
      return 1;
    }
@@ -1165,7 +1165,7 @@ int build_graph(void)
    // loop through all the unique trace steps 
    traceStepMap::iterator i,j;
    traceStepMap *Map;
-   Map = &data.all_trace_steps.traceSteps;
+   Map = &gdata.all_trace_steps.traceSteps;
    for( i=Map->begin(); i != Map->end(); )
    {
       string ts_key = i->first;
@@ -1182,27 +1182,27 @@ int build_graph(void)
       Map->erase( j );
 
       string fact_key = f->key;
-      OrNode *orNode = data.all_or_nodes.addOrNode(fact_key, f);
+      OrNode *orNode = gdata.all_or_nodes.addOrNode(fact_key, f);
       AndNode *andNode = new AndNode(num, metric);  
 
       if( andNode == NULL || orNode == NULL) {
           cerr << "Failed to create new node\n";
           return -1;
       }
-      data.all_and_nodes.nodeList.add( *andNode );
+      gdata.all_and_nodes.nodeList.add( *andNode );
        graph_data::nodeCount++;
        andNode->nodeNum = graph_data::nodeCount;
          andNode->parentNodeNum = orNode->nodeNum;
       orNode->outGoing.add(*(new Arc(orNode, andNode)));
-      for( Fact *fa= c->factList.gethead(); fa >0; fa = c->factList.getnext()) {
+      for( Fact *fa= c->factList.gethead(); fa >(Fact *)0; fa = c->factList.getnext()) {
            fact_key = fa->key; 
            Node *newNode;
            Type factType = fa->predicate->type; 
            if( factType == primitive) {
-               newNode = data.all_leaf_nodes.addLeafNode(fact_key, fa); 
+               newNode = gdata.all_leaf_nodes.addLeafNode(fact_key, fa); 
            }
            else if( factType == derived) {
-               newNode = data.all_or_nodes.addOrNode(fact_key, fa); 
+               newNode = gdata.all_or_nodes.addOrNode(fact_key, fa); 
            }
 	   if (factType == primitive || factType == derived){
 	     andNode->outGoing.add(*(new Arc(andNode, newNode)));
@@ -1214,11 +1214,11 @@ int build_graph(void)
 
    //Populating the head nodes
    NodeMap::iterator k;
-   for (k = data.goals.begin(); k != data.goals.end(); k++) {
+   for (k = gdata.goals.begin(); k != gdata.goals.end(); k++) {
      string fact_key = k->first;
-     Node *headNode = data.all_or_nodes.nodes[fact_key];
+     Node *headNode = gdata.all_or_nodes.nodes[fact_key];
      if (headNode != NULL){
-       data.goals[fact_key] = headNode;
+       gdata.goals[fact_key] = headNode;
      }
      else{
        cerr << "Warning: attack goal "<<fact_key<<" was not computed."<<endl;
@@ -1235,13 +1235,13 @@ int build_graph(void)
      break;
      */
    case nonSimple:
-     for (k = data.goals.begin(); k != data.goals.end(); k++) {
+     for (k = gdata.goals.begin(); k != gdata.goals.end(); k++) {
        Node *headNode = k->second;
        if (headNode != NULL){
 	 headNode->allSimplePaths();
        }
      }
-     for (k = data.goals.begin(); k != data.goals.end(); k++) {
+     for (k = gdata.goals.begin(); k != gdata.goals.end(); k++) {
        Node *headNode = k->second;
        if (headNode != NULL){
 	 headNode->pruneUselessEdges();
@@ -1255,7 +1255,7 @@ int build_graph(void)
    currentCounter++;
    currentNodeNum=1;
    currentArcNum = 1;
-   for (k = data.goals.begin(); k != data.goals.end(); k++) {
+   for (k = gdata.goals.begin(); k != gdata.goals.end(); k++) {
      Node *headNode = k->second;
      if (headNode != NULL){
        headNode->dfs(reAssignNodeNum);
@@ -1265,7 +1265,7 @@ int build_graph(void)
    //Assign metrics for AssetRank
    if (useMetrics){
      cerr << "Computing metrics..." << endl;
-     for (k = data.goals.begin(); k != data.goals.end(); k++) {
+     for (k = gdata.goals.begin(); k != gdata.goals.end(); k++) {
        Node *headNode = k->second;
        if (headNode != NULL){
 	 headNode->bestMetric();
@@ -1279,7 +1279,7 @@ int build_graph(void)
 int build_visual(bool arc_and_node)
 {
   NodeMap::iterator k;
-  for (k = data.goals.begin(); k != data.goals.end(); k++) {
+  for (k = gdata.goals.begin(); k != gdata.goals.end(); k++) {
     string fact_key = k->first;
     Node *headNode = k->second;
     if (headNode != NULL){
@@ -1303,7 +1303,7 @@ int build_cnf()
   NodeMap::iterator k;
   Node *headNode;
 
-  for (k = data.goals.begin(); k != data.goals.end(); k++) {
+  for (k = gdata.goals.begin(); k != gdata.goals.end(); k++) {
      headNode = k->second;
      if(headNode != NULL) {
        headNode->TransformToCNF(0);

@@ -25,7 +25,7 @@ cd XSB-5.0/build
 
 The other dependencies can be installed by using distro package management systems. For example, in Ubuntu:  
 ```     
-apt install -y build-essential default-jdk flex bison graphvix texlive-font-utils
+apt install -y build-essential default-jdk flex bison graphviz texlive-font-utils
 
 ```   
 
